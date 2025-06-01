@@ -1,0 +1,107 @@
+﻿@page "/"
+@implements IDisposable
+@inject ItineraryRepository ItineraryRepository
+@inject PersistentComponentState ApplicationState
+<PageTitle>NYC Planner</PageTitle>
+
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" @onclick="@OnSave">Save</MudButton>
+<div class="d-flex align-center flex-grow-1 gap-4"> 
+    <MudTextField @bind-Value="NewPlace" Label="New Place" Class="mb-2 d-inline-flex" />
+    <MudButton Class="d-inline-flex" @onclick="@OnAdd">Add</MudButton>
+
+</div>
+<MudDropContainer @ref="_dropContainer" T="DropZoneItem" Items="Items" ItemsSelector="@((item, dropzone) => item.Zone == dropzone)" ItemDropped="ItemUpdated" Class="4 flex-grow-1">
+    <ChildContent>
+        <MudDropContainer T="DropZone" Items="_zones" ItemDisabled="@(item => true)" ItemsSelector="@((item, dropzone) => true)" Class="5">
+            <ChildContent>
+                <MudDropZone T="DropZone" AllowReorder Class="6 rounded mud-background-gray px-2 py-1 ma-2" />
+            </ChildContent>
+            <ItemRenderer>
+                <MudPaper Class="pa-1 my-1">
+                    <MudText style="font-size:16px">@context.Name</MudText>
+                    <MudDropZone T="DropZoneItem" Identifier="@context.Name" AllowReorder Class="rounded mud-background-gray px-1 py-1 ma-1" />
+                </MudPaper>
+            </ItemRenderer>
+        </MudDropContainer>
+    </ChildContent>
+    <ItemRenderer>
+        <MudPaper Class="pa-1 my-1">
+            <MudText style="font-size:10px">@context.Name</MudText>
+        </MudPaper>
+    </ItemRenderer>
+</MudDropContainer>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" @onclick="@OnSave">Save</MudButton>
+
+@code {
+
+
+    private string NewPlace = string.Empty;
+    private MudDropContainer<DropZoneItem> _dropContainer;
+    private PersistingComponentStateSubscription persistingSubscription;
+    private void ItemUpdated(MudItemDropInfo<DropZoneItem> dropItem) => dropItem.Item!.Zone = dropItem.DropzoneIdentifier;
+    private void OnAdd()
+    {
+        if (!string.IsNullOrWhiteSpace(NewPlace))
+        {
+            Items.Add(new DropZoneItem() { Zone = TravelPriority.Must.ToString(), Name = NewPlace });
+            NewPlace = string.Empty;
+            _dropContainer.Refresh();
+        }
+    }
+    private async Task OnSave()
+    {
+        await ItineraryRepository.Save(Items);
+    }
+
+    private List<DropZone> _zones = new()
+    {
+        new() { Name = TravelPriority.Must.ToString() },
+        new() { Name = TravelPriority.LikeTo.ToString() },
+        new() { Name = TravelPriority.Could.ToString() },
+        new() { Name = TravelPriority.Out.ToString() }
+    };
+
+    public List<DropZoneItem> Items = []; //new DropZoneItem() { Zone = TravelPriority.Must.ToString(), Name = "Harry Potter Store"}];
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        persistingSubscription = ApplicationState.RegisterOnPersisting(PersistData, RenderMode.InteractiveWebAssembly);
+
+        if (!ApplicationState.TryTakeFromJson<List<DropZoneItem>>("ItemsData", out var restored))
+        {
+            Items = await ItineraryRepository.GetItinerary();
+        }
+        else
+        {
+            Items = restored!;
+        }
+
+        StateHasChanged();
+        _dropContainer.Refresh();
+    }
+
+
+    private Task PersistData()
+    {
+        ApplicationState.PersistAsJson("ItemsData", Items);
+
+        return Task.CompletedTask;
+    }
+
+    void IDisposable.Dispose()
+    {
+        try
+        {
+            persistingSubscription.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error disposing subscription: {ex.Message}");
+        }
+    }
+
+
+}
