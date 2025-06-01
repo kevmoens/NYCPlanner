@@ -38,7 +38,7 @@
 
 
     private string NewPlace = string.Empty;
-    private MudDropContainer<DropZoneItem> _dropContainer;
+    private MudDropContainer<DropZoneItem>? _dropContainer = null;
     private PersistingComponentStateSubscription persistingSubscription;
     private void ItemUpdated(MudItemDropInfo<DropZoneItem> dropItem) => dropItem.Item!.Zone = dropItem.DropzoneIdentifier;
     private void OnAdd()
@@ -47,7 +47,7 @@
         {
             Items.Add(new DropZoneItem() { Zone = TravelPriority.Must.ToString(), Name = NewPlace });
             NewPlace = string.Empty;
-            _dropContainer.Refresh();
+            _dropContainer?.Refresh();
         }
     }
     private async Task OnSave()
@@ -80,7 +80,7 @@
         }
 
         StateHasChanged();
-        _dropContainer.Refresh();
+        _dropContainer?.Refresh();
     }
 
 
