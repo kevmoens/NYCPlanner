@@ -10,5 +10,7 @@ namespace NYCPlanner.Shared
 	{
 		public string Zone { get; set; } = string.Empty;
 		public string Name { get; set; } = string.Empty;
+		public string? Link { get; set; }
+		public int? Seq { get; set; }
 	}
 }

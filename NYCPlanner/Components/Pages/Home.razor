@@ -1,17 +1,16 @@
 ﻿@page "/"
-@implements IDisposable
 @inject ItineraryRepository ItineraryRepository
-@inject PersistentComponentState ApplicationState
+@inject IDialogService DialogService
 <PageTitle>NYC Planner</PageTitle>
 
 
 <MudButton Variant="Variant.Filled" Color="Color.Primary" @onclick="@OnSave">Save</MudButton>
 <div class="d-flex align-center flex-grow-1 gap-4"> 
-    <MudTextField @bind-Value="NewPlace" Label="New Place" Class="mb-2 d-inline-flex" />
+    <MudTextField @bind-Value="NewPlace" Label="New Place" Class="mb-2 d-inline-flex" @onkeydown="NewPlace_KeyDown" />
     <MudButton Class="d-inline-flex" @onclick="@OnAdd">Add</MudButton>
 
 </div>
-<MudDropContainer @ref="_dropContainer" T="DropZoneItem" Items="Items" ItemsSelector="@((item, dropzone) => item.Zone == dropzone)" ItemDropped="ItemUpdated" Class="4 flex-grow-1">
+<MudDropContainer @ref="_dropContainer" T="DropZoneItem" Items="@Items" ItemsSelector="@((item, dropzone) => item.Zone == dropzone)" ItemDropped="ItemUpdated" Class="4 flex-grow-1">
     <ChildContent>
         <MudDropContainer T="DropZone" Items="_zones" ItemDisabled="@(item => true)" ItemsSelector="@((item, dropzone) => true)" Class="5">
             <ChildContent>
@@ -26,8 +25,13 @@
         </MudDropContainer>
     </ChildContent>
     <ItemRenderer>
-        <MudPaper Class="pa-1 my-1">
-            <MudText style="font-size:10px">@context.Name</MudText>
+        <MudPaper Class="d-flex flex-grow-1 pa-1 my-1">
+            <MudText Class="align-self-center" style="flex: 1 1 60%; font-size:10px">@context.Name</MudText>
+            @if(!string.IsNullOrEmpty(context.Link))
+            {               
+                <MudLink Class="align-self-center" Style="flex: 1 1 40%;" Href="@context.Link" Target="_blank">Link</MudLink>
+            }
+            <MudIconButton Class="flex-none" style="width:20px;height:20px" Icon="@Icons.Material.Filled.Edit" aria-label="Edit" @onclick="@(async () => await OnEdit(@context))" />
         </MudPaper>
     </ItemRenderer>
 </MudDropContainer>
@@ -39,16 +43,100 @@
 
     private string NewPlace = string.Empty;
     private MudDropContainer<DropZoneItem>? _dropContainer = null;
-    private PersistingComponentStateSubscription persistingSubscription;
-    private void ItemUpdated(MudItemDropInfo<DropZoneItem> dropItem) => dropItem.Item!.Zone = dropItem.DropzoneIdentifier;
+    private void ItemUpdated(MudItemDropInfo<DropZoneItem> dropItem) 
+    { 
+        dropItem.Item!.Zone = dropItem.DropzoneIdentifier;
+
+
+        List<string> previousZones = [];
+        switch (dropItem.DropzoneIdentifier)
+        {
+            case "Must":
+                break;
+            case "LikeTo":
+                previousZones.Add("Must");
+                break;
+            case "Could":
+                previousZones.Add("Must");
+                previousZones.Add("LikeTo");
+                break;
+            case "Out":
+                previousZones.Add("Must");
+                previousZones.Add("LikeTo");
+                previousZones.Add("Could");
+                break;
+        }
+        int offset = Items.Count(i => previousZones.Contains(i.Zone));
+
+        int num = dropItem.IndexInZone + offset ;
+        DropZoneItem item = dropItem.Item!;
+        int num2 = 0;
+        foreach (DropZoneItem item2 in Items.OrderBy((DropZoneItem x) => x.Seq ?? 0))
+        {
+            if (item2.Equals(item))
+            {
+                item.Seq = num;
+                continue;
+            }
+
+            if (num2 == num)
+            {
+                num2++;
+            }
+
+            item2.Seq = num2;
+            num2++;
+        }
+
+
+    }
+    private void NewPlace_KeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            OnAdd();
+        }
+    }
     private void OnAdd()
     {
         if (!string.IsNullOrWhiteSpace(NewPlace))
         {
-            Items.Add(new DropZoneItem() { Zone = TravelPriority.Must.ToString(), Name = NewPlace });
+            int lastMust = 0;
+            foreach (var item in Items)
+            {
+                if (item.Zone == TravelPriority.Must.ToString())
+                {
+                    lastMust = item.Seq ?? 0;
+                }
+                else
+                {
+                    item.Seq++;
+                }
+            }
+            Items.Add(new DropZoneItem() { Zone = TravelPriority.Must.ToString(), Name = NewPlace, Seq = lastMust + 1 });
             NewPlace = string.Empty;
+            StateHasChanged();
             _dropContainer?.Refresh();
         }
+    }
+    private async Task OnEdit(DropZoneItem item)
+    {
+
+        var parameters = new DialogParameters<EditDialog>
+        {
+            { x => x.Item, item },
+            { x => x.OkAction, RefreshUI }
+        };
+
+        await DialogService.ShowAsync<EditDialog>("Edit", parameters);
+        StateHasChanged();
+        _dropContainer?.Refresh();
+
+    }
+    private void RefreshUI()
+    {
+        StateHasChanged();
+        _dropContainer?.Refresh();
     }
     private async Task OnSave()
     {
@@ -63,45 +151,21 @@
         new() { Name = TravelPriority.Out.ToString() }
     };
 
-    public List<DropZoneItem> Items = []; //new DropZoneItem() { Zone = TravelPriority.Must.ToString(), Name = "Harry Potter Store"}];
-
+    public List<DropZoneItem> Items = [];
 
     protected override async Task OnInitializedAsync()
     {
-        persistingSubscription = ApplicationState.RegisterOnPersisting(PersistData, RenderMode.InteractiveWebAssembly);
-
-        if (!ApplicationState.TryTakeFromJson<List<DropZoneItem>>("ItemsData", out var restored))
-        {
+   
             Items = await ItineraryRepository.GetItinerary();
-        }
-        else
-        {
-            Items = restored!;
-        }
+            int i = 0;
+            var sortedItems = Items.OrderBy(i => i.Seq)
+                                   .OrderBy(zi=> _zones.IndexOf(_zones.FirstOrDefault(z => z.Name == zi.Zone) ?? _zones[0]))
+                                   .ToList();            
 
         StateHasChanged();
         _dropContainer?.Refresh();
     }
 
-
-    private Task PersistData()
-    {
-        ApplicationState.PersistAsJson("ItemsData", Items);
-
-        return Task.CompletedTask;
-    }
-
-    void IDisposable.Dispose()
-    {
-        try
-        {
-            persistingSubscription.Dispose();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error disposing subscription: {ex.Message}");
-        }
-    }
 
 
 }

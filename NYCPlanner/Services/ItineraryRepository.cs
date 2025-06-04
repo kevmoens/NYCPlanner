@@ -59,7 +59,7 @@ namespace NYCPlanner.Services
 			{
 				foreach (var zone in response.Resource.Zones)
 				{
-					foreach (var item in zone.Items ?? [])
+					foreach (var item in (zone.Items ?? []).OrderBy((i) => i.Seq))
 					{
 						Items.Add(item);
 					}
@@ -81,11 +81,11 @@ namespace NYCPlanner.Services
 						Name = zone.Name,
 						Items = []
 					};
-					foreach (var item in items)
+					foreach (var item in items.OrderBy(i => i.Seq))
 					{
 						if (item.Zone == zone.Name)
 						{
-							newZone.Items.Add(new DropZoneItem() { Zone = zone.Name, Name = item.Name });
+							newZone.Items.Add(new DropZoneItem() { Zone = zone.Name, Name = item.Name, Link = item.Link, Seq = item.Seq });
 						}
 					}
 					trip.Zones.Add(newZone);

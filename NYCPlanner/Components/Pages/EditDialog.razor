@@ -1,0 +1,28 @@
+﻿<MudDialog>
+    <DialogContent>
+        <div class="d-flex flex-column py-1">
+            <MudTextField @bind-Value="Item.Name" Label="Name"/>
+            <MudTextField @bind-Value="Item.Link" Label="Link"/>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="Close">OK</MudButton>
+    </DialogActions>
+</MudDialog>
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; }
+
+    [Parameter]
+    public DropZoneItem Item { get; set; }
+    [Parameter]
+    public Action OkAction { get; set; }
+
+    private void Close() 
+    {
+        OkAction.Invoke();
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+ 
+}
